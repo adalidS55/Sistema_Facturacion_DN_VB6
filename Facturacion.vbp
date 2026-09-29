@@ -13,6 +13,7 @@ Form=codigo\formularios\ingresos.frm
 Module=InventarioVinculado; codigo\modulos\InventarioVinculado.bas
 Module=Module1; codigo\modulos\Module1.bas
 Form=codigo\formularios\Facturacion.frm
+Class=ReporteVentas; codigo\clases\ReporteVentas.cls
 Class=FacturaPendiente; codigo\clases\FacturaPendiente.cls
 Form=codigo\formularios\claveproducos.frm
 Form=codigo\formularios\claveusuario.frm

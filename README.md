@@ -89,3 +89,9 @@ La tabla `presentaciones` guarda código de venta, código base y factor. La anu
 
 No se permiten factores cero o negativos, más de cuatro decimales, vínculos consigo mismo ni cadenas de paquetes. No se convierte en paquete un producto que conserva existencia propia, abastece otros paquetes o debe conservar su inventario para anular ventas anteriores. Usar un código nuevo en esos casos. Los productos base referenciados no pueden eliminarse.
 El selector de producto base muestra solo nombres: se puede escribir el nombre completo o su inicio y pulsar Enter. Si hay varias coincidencias, se debe completar el nombre o elegir de la lista. El codigo vinculado se conserva internamente.
+
+## Informes de ventas sin desbordamiento de contadores
+
+Los informes Resumen diario, Venta detallada y Venta mensual consultan solo las fechas seleccionadas mediante parámetros. El rango incluye todo el día final. Los conteos usan Long y COUNT(*) en la base; no se recorre todo el historial para contar. Los totales se calculan mediante SUM, conservando el descuento por unidad en el detalle.
+
+La cuadrícula muestra hasta 1,000 registros por página, con botones Anterior y Siguiente. El conteo y los importes inferiores corresponden a todo el período consultado y no cambian al pasar de página. Generar el informe nuevamente actualiza sus resultados. Borrar limpia únicamente la consulta en pantalla. Las facturas históricas se conservan en la misma base.

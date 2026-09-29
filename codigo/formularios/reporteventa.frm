@@ -14,6 +14,33 @@ Begin VB.Form reporteventa
    ScaleHeight     =   7500
    ScaleWidth      =   9870
    StartUpPosition =   2  'CenterScreen
+   Begin VB.CommandButton cmdAnterior
+      Caption = "< Anterior"
+      Left = 120
+      Top = 6315
+      Width = 1560
+      Height = 360
+      Enabled = 0
+      TabIndex = 20
+   End
+   Begin VB.CommandButton cmdSiguiente
+      Caption = "Siguiente >"
+      Left = 1800
+      Top = 6315
+      Width = 1560
+      Height = 360
+      Enabled = 0
+      TabIndex = 21
+   End
+   Begin VB.Label lblPagina
+      Caption = "Sin consulta"
+      BackStyle = 0
+      ForeColor = &H00FFFFFF&
+      Left = 3600
+      Top = 6360
+      Width = 6120
+      Height = 300
+   End
    Begin VB.TextBox Text1 
       Enabled         =   0   'False
       BeginProperty Font 
@@ -29,7 +56,7 @@ Begin VB.Form reporteventa
       Left            =   1440
       TabIndex        =   12
       Top             =   6885
-      Width           =   800
+      Width           =   1200
    End
    Begin VB.TextBox Text4 
       Enabled         =   0   'False
@@ -38,7 +65,7 @@ Begin VB.Form reporteventa
       TabIndex        =   9
       Top             =   600
       Visible         =   0   'False
-      Width           =   735
+      Width           =   1300
    End
    Begin VB.TextBox Text3 
       BackColor       =   &H00FFFF80&
@@ -77,7 +104,7 @@ Begin VB.Form reporteventa
       Width           =   1500
    End
    Begin MSFlexGridLib.MSFlexGrid MSFlexGrid1 
-      Height          =   5535
+      Height          =   5055
       Left            =   120
       TabIndex        =   0
       Top             =   1200
@@ -307,7 +334,7 @@ Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = True
 Attribute VB_Exposed = False
 Dim cn As New ADODB.Connection
-Dim rs As New ADODB.Recordset
+Private informe As New ReporteVentas
 
 ''Parte del Scroll Mouse------------------------------------------------------------------------------------------------------------------------------------------------------
 Public Sub MouseWheel(ByVal MouseKeys As Long, ByVal Rotation As Long, ByVal Xpos As Long, ByVal Ypos As Long)
@@ -317,8 +344,8 @@ End Sub
 Private Sub Form_Load()
 
 ''Parte del Scroll Mouse------------------------------------------------------------------------------------------------------------------------------------------------------
-  Dim N As Integer
-  Dim I As Integer
+  Dim N As Long
+  Dim I As Long
   With MSFlexGrid1
     .Rows = 2
     .Cols = 8
@@ -331,12 +358,7 @@ Private Sub Form_Load()
 
 
 
-Set rs = New ADODB.Recordset
 cn.Open "Provider=Microsoft.Jet.OLEDB.4.0;" & "Data Source=" & rutaBD & ";Persist Security Info=False;JET OLEDB:DATABASE PASSWORD = Dnacho2024$@"
-rs.Source = "facturareporte"
-rs.CursorType = adOpenKeyset
-rs.LockType = adLockOptimistic
-rs.Open "select * from facturareporte", cn
 
 cuadroreporte
 
@@ -360,75 +382,61 @@ Private Sub Image1_Click()
 End Sub
 
 Private Sub Image2_Click()
-Text1.Text = Empty
-Text2.Text = Empty
-Text3.Text = Empty
-Dim v As Integer
-Dim w As Integer
-Dim a As Integer
-'********************************************************************
-Dim numreg As Integer
-Dim numreg2 As Integer
-numreg = 0
-numreg2 = 0
-rs.Find "fechafact = '" & DTPicker1.Value & "'", , , 1
-
-If rs.EOF = True Or rs.BOF = True Then
-    MsgBox "No hay registros en Facturas", vbInformation, "Reporte Ventas"
-    limpiarcuadroreporte
-    cuadroreporte
-    Text4.Text = Empty
+    On Error GoTo Fallo
+    Screen.MousePointer = vbHourglass
+    informe.Cargar cn, DTPicker1.Value, DTPicker1.Value, False
+    Text1.Text = CStr(informe.Cantidad)
+    Text4.Text = CStr(informe.CantidadHistorica)
+    Text2.Text = CStr(informe.TotalVendido)
+    Text3.Text = CStr(informe.TotalGanancia)
+    Text2.ToolTipText = "Total del periodo completo: " & Text2.Text
+    Text3.ToolTipText = "Ganancia del periodo completo: " & Text3.Text
+    MostrarPaginaInforme
+    Screen.MousePointer = vbDefault
+    If informe.Cantidad = 0 Then MsgBox "No hay ventas en las fechas seleccionadas.", vbInformation, "Reporte de ventas"
     Exit Sub
-    End If
-    
-rs.MoveFirst
-Do While rs.EOF = False
-    If rs.Fields("fechafact") = DTPicker1.Value Then
-        numreg = numreg + 1
-    Else
-        numreg = numreg
-    End If
-    rs.MoveNext
-Loop
-Text1.Text = numreg
-MSFlexGrid1.Rows = Text1.Text + 1
-rs.MoveFirst
-Do While rs.EOF = False
-    numreg2 = numreg2 + 1
-    rs.MoveNext
-Loop
-Text4.Text = numreg2
-If rs.EOF = True And rs.BOF = True Then
-    MsgBox "No hay registros en Facturas", vbInformation, "Reporte Ventas"
-    Exit Sub
-Else
-'********************************************************************
-    rs.Find "fechafact = '" & DTPicker1.Value & "'", , , 1
-'*********************************************************************
-    rs.MoveFirst
-    For a = 1 To Text1.Text
-If rs.Fields("fechafact") = DTPicker1.Value Then
-            MSFlexGrid1.TextMatrix(a, 1) = rs.Fields("numfact")
-            MSFlexGrid1.TextMatrix(a, 2) = rs.Fields("fechafact")
-            MSFlexGrid1.TextMatrix(a, 3) = rs.Fields("horafact")
-            MSFlexGrid1.TextMatrix(a, 4) = rs.Fields("subtotal")
-            MSFlexGrid1.TextMatrix(a, 5) = rs.Fields("totaldescuento")
-            MSFlexGrid1.TextMatrix(a, 6) = rs.Fields("totalneto")
-            MSFlexGrid1.TextMatrix(a, 7) = rs.Fields("totalganacia")
-            Text3.Text = Val(Text3.Text) + Val(MSFlexGrid1.TextMatrix(a, 7))
-            Text2.Text = Val(Text2.Text) + Val(MSFlexGrid1.TextMatrix(a, 6))
-        Else
-            a = a - 1
-        End If
-        rs.MoveNext
-    Next
-End If
+Fallo:
+    Screen.MousePointer = vbDefault
+    Dim mensaje As String
+    mensaje = Err.Description
+    Image6_Click
+    MsgBox "No se pudo generar el informe: " & mensaje, vbExclamation, "Reporte de ventas"
 End Sub
 
 
 
 Private Sub Image6_Click()
-limpiarcuadroreporte
-cuadroreporte
-Text4.Text = Empty
+    informe.Limpiar
+    limpiarcuadroreporte
+    cuadroreporte
+    lblPagina.Caption = "Sin consulta"
+    cmdAnterior.Enabled = False
+    cmdSiguiente.Enabled = False
+    Text2.ToolTipText = ""
+    Text3.ToolTipText = ""
+End Sub
+
+Private Sub MostrarPaginaInforme()
+    informe.Mostrar MSFlexGrid1
+    cmdAnterior.Enabled = (informe.Pagina > 1)
+    cmdSiguiente.Enabled = (informe.Pagina < informe.Paginas)
+    lblPagina.Caption = "Pagina " & informe.Pagina & " de " & informe.Paginas & " | " & informe.Cantidad & " registros | Totales del periodo completo"
+End Sub
+
+Private Sub cmdAnterior_Click()
+    On Error GoTo Fallo
+    informe.MoverPagina -1
+    MostrarPaginaInforme
+    Exit Sub
+Fallo:
+    MsgBox Err.Description, vbExclamation, "Pagina del informe"
+End Sub
+
+Private Sub cmdSiguiente_Click()
+    On Error GoTo Fallo
+    informe.MoverPagina 1
+    MostrarPaginaInforme
+    Exit Sub
+Fallo:
+    MsgBox Err.Description, vbExclamation, "Pagina del informe"
 End Sub

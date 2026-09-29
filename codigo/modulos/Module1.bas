@@ -172,8 +172,8 @@ reporteventamensual.MSFlexGrid1.ColAlignment(7) = 3
 End Sub
 
 Public Sub limpiarcuadroreporte()
-Dim v As Integer
-Dim w As Integer
+Dim v As Long
+Dim w As Long
 For v = 0 To reporteventa.MSFlexGrid1.Rows - 1
   For w = 0 To reporteventa.MSFlexGrid1.Cols - 1
   reporteventa.MSFlexGrid1.TextMatrix(v, w) = ""
@@ -187,8 +187,8 @@ reporteventa.Text3.Text = Empty
 End Sub
 
 Public Sub limpiarcuadroreportemensual()
-Dim v As Integer
-Dim w As Integer
+Dim v As Long
+Dim w As Long
 For v = 0 To reporteventamensual.MSFlexGrid1.Rows - 1
   For w = 0 To reporteventamensual.MSFlexGrid1.Cols - 1
   reporteventamensual.MSFlexGrid1.TextMatrix(v, w) = ""
@@ -360,8 +360,8 @@ reportingresos.MSFlexGrid1.ColAlignment(5) = 3
 End Sub
 
 Public Sub limpiarcuadrodetallado()
-Dim v As Integer
-Dim w As Integer
+Dim v As Long
+Dim w As Long
 For v = 0 To reporteventadetallado.MSFlexGrid1.Rows - 1
   For w = 0 To reporteventadetallado.MSFlexGrid1.Cols - 1
   reporteventadetallado.MSFlexGrid1.TextMatrix(v, w) = ""
