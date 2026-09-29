@@ -1,0 +1,11 @@
+# Datos operativos y privados
+/datos/**
+*.ldb
+# Generados por VB6
+*.exe
+*.vbw
+*.DCA
+*.log
+*.tmp
+.vs/
+/registros/
