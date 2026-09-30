@@ -253,6 +253,8 @@ Attribute VB_PredeclaredId = True
 Attribute VB_Exposed = False
 Option Explicit
 
+Private Declare Function GetSystemMetrics Lib "user32" (ByVal nIndex As Long) As Long
+
 Private cn As ADODB.Connection
 Private originales() As Variant
 Private totalFilas As Long
@@ -263,9 +265,11 @@ Private enganchado As Boolean
 Private respaldoRecuperado As String
 Private editados As Object
 Private respaldoEdicion As String
+Private respaldoNuevo As String
 
 Private Sub Form_Load()
     respaldoEdicion = vbNullString
+    respaldoNuevo = vbNullString
     On Error GoTo Fallo
     cargando = True
     Set editados = CreateObject("Scripting.Dictionary")
@@ -287,8 +291,8 @@ Private Sub Form_Load()
         .ColWidth(2) = 1500
         .ColWidth(3) = 1500
         .ColWidth(4) = 1500
-        .ColWidth(5) = 1500
-        .ColWidth(6) = 1500
+        .ColWidth(5) = 0
+        .ColWidth(6) = 0
         .RowHeightMin = 360
         .TextMatrix(0, 0) = "Código"
         .TextMatrix(0, 1) = "Producto"
@@ -298,6 +302,7 @@ Private Sub Form_Load()
         .TextMatrix(0, 5) = "Precio costo"
         .TextMatrix(0, 6) = "Fecha"
     End With
+    AjustarColumnasProductos
     CargarProductos
     CargarRespaldos
     WheelHook Me
@@ -433,21 +438,15 @@ Private Function ValorFila(ByVal fila As Long) As Variant
     ValorFila = valor
 End Function
 
-Private Function PuedeEditar() As Boolean
+Private Function TieneRespaldoAntiguo() As Boolean
     If Len(respaldoEdicion) = 0 Then Exit Function
-    PuedeEditar = (Len(Dir$(respaldoEdicion)) > 0)
+    TieneRespaldoAntiguo = (Len(Dir$(respaldoEdicion)) > 0)
 End Function
 
 Private Function AceptarEdicion() As Boolean
     Dim valor As Variant
     AceptarEdicion = True
     If cargando Or filaEditada = 0 Then Exit Function
-    If Not PuedeEditar Then
-        AceptarEdicion = False
-        txtCantidad.Visible = False
-        MsgBox "Primero guarde una copia de datos antiguos.", vbExclamation
-        Exit Function
-    End If
     If Not CantidadValida(txtCantidad.Text, filaEditada, valor) Then
         AceptarEdicion = False
         MsgBox "Escriba una cantidad numérica con un máximo de cuatro decimales (vacío = sin dato).", vbExclamation, "Cantidad"
@@ -476,13 +475,13 @@ Private Function HayEdiciones() As Boolean
 End Function
 
 Private Sub ActualizarEstado()
+    ColorearCantidades
     lblEstado.Caption = totalFilas & " productos con inventario propio | " & Cambios & " cantidades modificadas sin guardar"
-    If Not PuedeEditar Then lblEstado.Caption = lblEstado.Caption & " | Guarde datos antiguos para editar."
+    If Not TieneRespaldoAntiguo Then lblEstado.Caption = lblEstado.Caption & " | Antes de guardar, guarde datos antiguos."
 
 End Sub
 
 Private Sub MostrarEditor()
-    If Not PuedeEditar Then filaEditada = 0: txtCantidad.Visible = False: Exit Sub
     If cargando Or ocupado Or totalFilas = 0 Then Exit Sub
     If grdProductos.Row < 1 Then Exit Sub
     filaEditada = grdProductos.Row
@@ -496,7 +495,6 @@ Private Sub MostrarEditor()
 End Sub
 
 Private Sub PosicionarEditor()
-    If Not PuedeEditar Then txtCantidad.Visible = False: Exit Sub
     If filaEditada = 0 Or ocupado Then txtCantidad.Visible = False: Exit Sub
     With grdProductos
         txtCantidad.Visible = .RowIsVisible(filaEditada) And .ColIsVisible(3)
@@ -663,12 +661,12 @@ Private Sub GuardarDatosManual(ByVal nuevos As Boolean)
     On Error GoTo Fallo
     If ocupado Then Exit Sub
     If nuevos Then
-        If Not PuedeEditar Then
-            MsgBox "Primero guarde datos antiguos para habilitar las cantidades nuevas.", vbExclamation
+        If Not TieneRespaldoAntiguo Then
+            MsgBox "Primero guarde una copia de datos antiguos antes de guardar datos nuevos.", vbExclamation
             Exit Sub
         End If
-        If Not AceptarEdicion Then Exit Sub
     End If
+    If Not AceptarEdicion Then Exit Sub
     ocupado = True
     Screen.MousePointer = vbHourglass
     If nuevos Then
@@ -677,10 +675,16 @@ Private Sub GuardarDatosManual(ByVal nuevos As Boolean)
     Else
         tipo = "datosantiguos"
         Set datos = LeerProductos()
+        ValidarDatosActuales datos
     End If
     ruta = GuardarRespaldo(datos, tipo)
     datos.Close
-    If Not nuevos Then respaldoEdicion = ruta
+    If nuevos Then
+        respaldoNuevo = ruta
+    Else
+        respaldoEdicion = ruta
+        respaldoNuevo = vbNullString
+    End If
     CargarRespaldos
     For i = 0 To cboRespaldos.ListCount - 1
         If CarpetaRespaldos & "\" & NombreArchivoReal(cboRespaldos.List(i)) = ruta Then cboRespaldos.ListIndex = i
@@ -725,13 +729,99 @@ Private Sub ActualizarCantidad(ByVal codigo As String, ByVal anterior As Variant
     End If
 End Sub
 
+Private Sub ValidarDatosActuales(ByVal datos As ADODB.Recordset)
+    Dim indice As Object, filas As Object, i As Long, codigo As String
+    Set indice = IndiceProductos(datos)
+    If indice.Count <> totalFilas Then Err.Raise 5, , "Se agregaron, eliminaron o vincularon productos fuera de esta ventana. Recargue antes de guardar."
+    Set filas = CreateObject("Scripting.Dictionary")
+    filas.CompareMode = vbTextCompare
+    For i = 1 To totalFilas
+        codigo = grdProductos.TextMatrix(i, 0)
+        If Not indice.Exists(codigo) Then Err.Raise 5, , "El producto " & codigo & " cambió fuera de esta ventana. Recargue antes de guardar."
+        If Not Iguales(originales(i), indice(codigo)) Then Err.Raise 5, , "La cantidad del producto " & codigo & " cambió por una factura u otra operación. Recargue antes de guardar."
+        filas.Add codigo, i
+    Next i
+    If Not datos.EOF Or datos.RecordCount > 0 Then datos.MoveFirst
+    Do While Not datos.EOF
+        codigo = Texto(datos!codproducto)
+        i = CLng(filas(codigo))
+        If Texto(datos!nombreprod) <> grdProductos.TextMatrix(i, 1) Or _
+           Texto(datos!preciov) <> grdProductos.TextMatrix(i, 4) Or _
+           Texto(datos!precioc) <> grdProductos.TextMatrix(i, 5) Or _
+           Texto(datos!fechav) <> grdProductos.TextMatrix(i, 6) Then
+            Err.Raise 5, , "Los datos del producto " & codigo & " cambiaron fuera de esta ventana. Recargue antes de guardar."
+        End If
+        datos.MoveNext
+    Loop
+End Sub
+
+Private Sub ValidarRespaldoNuevo()
+    Dim datos As New ADODB.Recordset, indice As Object
+    If Len(respaldoNuevo) = 0 Then Err.Raise 5, , "Primero guarde una copia de datos nuevos antes de aplicar los cambios."
+    If Len(Dir$(respaldoNuevo)) = 0 Then Err.Raise 5, , "La copia de datos nuevos ya no existe. Guarde datos nuevos otra vez."
+    datos.Open respaldoNuevo, , adOpenStatic, adLockReadOnly
+    Set indice = IndiceProductos(datos)
+    datos.Close
+    ValidarCantidadesRespaldadas indice
+End Sub
+
+Private Sub ValidarCantidadesRespaldadas(ByVal indice As Object)
+    Dim i As Long, codigo As String
+    If indice.Count <> totalFilas Then Err.Raise 5, , "La lista cambió desde el respaldo. Guarde datos nuevos otra vez."
+    For i = 1 To totalFilas
+        codigo = grdProductos.TextMatrix(i, 0)
+        If Not indice.Exists(codigo) Then Err.Raise 5, , "La lista cambió desde el respaldo. Guarde datos nuevos otra vez."
+        If Not Iguales(ValorFila(i), indice(codigo)) Then Err.Raise 5, , "Hay cantidades nuevas modificadas después del respaldo. Guarde datos nuevos otra vez antes de aplicar los cambios."
+    Next i
+End Sub
+
+Private Function ColorCantidad(ByVal valor As String) As Long
+    ColorCantidad = grdProductos.ForeColor
+    If IsNumeric(valor) Then
+        If CDbl(valor) < 0 Then ColorCantidad = vbRed
+    End If
+End Function
+
+Private Sub txtCantidad_Change()
+    txtCantidad.ForeColor = ColorCantidad(txtCantidad.Text)
+End Sub
+
+Private Sub ColorearCantidades()
+    Dim fila As Long, columna As Long, filaAnterior As Long, columnaAnterior As Long
+    Dim seleccionFila As Long, seleccionColumna As Long, estabaCargando As Boolean
+    If totalFilas = 0 Then Exit Sub
+    estabaCargando = cargando
+    cargando = True
+    With grdProductos
+        filaAnterior = .Row
+        columnaAnterior = .Col
+        seleccionFila = .RowSel
+        seleccionColumna = .ColSel
+        .Redraw = False
+        For fila = 1 To totalFilas
+            .Row = fila
+            For columna = 2 To 3
+                .Col = columna
+                .CellForeColor = ColorCantidad(.TextMatrix(fila, columna))
+            Next columna
+        Next fila
+        .Row = filaAnterior
+        .Col = columnaAnterior
+        .RowSel = seleccionFila
+        .ColSel = seleccionColumna
+        .Redraw = True
+    End With
+    cargando = estabaCargando
+    txtCantidad.ForeColor = ColorCantidad(txtCantidad.Text)
+End Sub
+
 Private Sub cmdGuardar_Click()
-    Dim i As Long, numero As Long, datos As ADODB.Recordset, indice As Object
+    Dim i As Long, numero As Long, datos As ADODB.Recordset
     Dim codigo As String, mensaje As String, aviso As String
     Dim transaccion As Boolean, guardado As Boolean
     If ocupado Then Exit Sub
     On Error GoTo Fallo
-    If Not PuedeEditar Then
+    If Not TieneRespaldoAntiguo Then
         MsgBox "Primero guarde una copia de datos antiguos.", vbExclamation
         Exit Sub
     End If
@@ -741,6 +831,7 @@ Private Sub cmdGuardar_Click()
         MsgBox "No hay cantidades modificadas.", vbInformation
         Exit Sub
     End If
+    ValidarRespaldoNuevo
     mensaje = vbNullString
     If Len(respaldoRecuperado) > 0 Then mensaje = vbCrLf & "Al completar la recuperación se eliminará el respaldo seleccionado."
     If MsgBox("Se actualizarán " & numero & " cantidades." & mensaje & vbCrLf & "¿Guardar los cambios?", vbQuestion Or vbYesNo Or vbDefaultButton2, "Control de Inventario") <> vbYes Then Exit Sub
@@ -749,14 +840,7 @@ Private Sub cmdGuardar_Click()
     cn.BeginTrans
     transaccion = True
     Set datos = LeerProductos()
-    Set indice = IndiceProductos(datos)
-    For i = 1 To totalFilas
-        If Not Iguales(originales(i), ValorFila(i)) Or Len(respaldoRecuperado) > 0 Then
-            codigo = grdProductos.TextMatrix(i, 0)
-            If Not indice.Exists(codigo) Then Err.Raise 5, , "Ya no existe el producto " & codigo & ". Recargue la lista."
-            If Not Iguales(originales(i), indice(codigo)) Then Err.Raise 5, , "La cantidad de " & codigo & " cambió desde que abrió la lista. Recargue antes de guardar."
-        End If
-    Next i
+    ValidarDatosActuales datos
     For i = 1 To totalFilas
         If Not Iguales(originales(i), ValorFila(i)) Then
             ActualizarCantidad grdProductos.TextMatrix(i, 0), originales(i), ValorFila(i)
@@ -792,10 +876,6 @@ Private Sub cmdRestaurar_Click()
     Dim i As Long, codigo As String, encontrados As Long, faltantes As Long, rutaRecuperada As String
     On Error GoTo Fallo
     If ocupado Or cboRespaldos.ListIndex < 0 Then Exit Sub
-    If Not PuedeEditar Then
-        MsgBox "Guarde datos antiguos antes de preparar una recuperación.", vbExclamation
-        Exit Sub
-    End If
     Dim confirmacion As String
     confirmacion = "¿Recuperar las cantidades del respaldo " & cboRespaldos.Text & "?"
     If HayEdiciones Then confirmacion = confirmacion & vbCrLf & "Se reemplazarán las cantidades nuevas que tiene sin guardar."
@@ -878,12 +958,33 @@ Private Sub Form_Unload(Cancel As Integer)
     Set cn = Nothing
 End Sub
 
+Private Sub AjustarColumnasProductos()
+    Dim disponible As Long, numerica As Long, codigo As Long, nombre As Long
+    'Reservar bordes y barra vertical para mantener las cinco columnas visibles.
+    disponible = grdProductos.Width - (GetSystemMetrics(2) + 4) * Screen.TwipsPerPixelX
+    If disponible < 6000 Then Exit Sub
+    numerica = CLng(disponible * 0.12)
+    If numerica < 1500 Then numerica = 1500
+    codigo = CLng((disponible - 3 * numerica) * 0.3)
+    nombre = disponible - 3 * numerica - codigo
+    With grdProductos
+        .ColWidth(0) = codigo
+        .ColWidth(1) = nombre
+        .ColWidth(2) = numerica
+        .ColWidth(3) = numerica
+        .ColWidth(4) = numerica
+        .ColWidth(5) = 0
+        .ColWidth(6) = 0
+    End With
+End Sub
+
 Private Sub Form_Resize()
     If WindowState = vbMinimized Then Exit Sub
     If Width < 12600 Then Width = 12600
     If Height < 7400 Then Height = 7400
     grdProductos.Width = ScaleWidth - 480
     grdProductos.Height = ScaleHeight - 5070
+    AjustarColumnasProductos
     imgFondo.Move 0, 0, ScaleWidth, ScaleHeight
     lblTitulo.Width = ScaleWidth - 480
     lblAyuda.Width = ScaleWidth - 480
